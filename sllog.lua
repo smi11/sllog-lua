@@ -34,19 +34,24 @@
 
  -- level name, prefix, suffix, file handle
  local log = require "sllog":init{
-  {"info",   "%c %L ", "\n", io.stdout},
-  {"verbose","%c %L ", "\n", io.stdout},
-  {"debug",  "%c %L %S ", "\n", io.stderr},
- }
+  {"err",  "%F %T %-4L ",        "%n", io.stderr},
+  {"warn", "%F %T %-4L ",        "%n", io.stderr},
+  {"info", "%F %T %-4L ",        "%n", io.stderr},
+  {"dbg",  "%F %T (%S) %-4L%f ", "%n", io.stderr},
+  timefn=(socket or {}).gettime  -- use socket.gettime if available
+  report="dbg",       -- to which level should internal log events be passed?
+  hookrequire=true,   -- also report calls to require()
+  level="dbg"         -- output levels up to and including "dbg"
+}
 
  -- you can specify level either by index or name
- log(1, "some message")
- log[1]("some message")
+ log(3, "some message")
+ log[3]("some message")
  log:info("same as previous line, but using name")
  log("info", "also same as previous lines")
 
  local x = 123
- log:debug("my var is ", x)
+ log:dbg("my var is ", x)
 
  See README.md for documentation
 
@@ -77,31 +82,32 @@ logger.__index = logger
 -- table containing default settings and list of levels to be used with logger:init()
 -- name, prefix, suffix, file handle
 local default = {
-  {"info",    "%F %T %-7L ",    "\n", io.stdout},
-  {"verbose", "%F %T %-7L ",    "\n", io.stdout},
-  {"debug",   "%F %T %-7L (%S) ", "\n", io.stderr},
+  {"err",  "%F %T %-4L ",      "%n", io.stderr},
+  {"warn", "%F %T %-4L ",      "%n", io.stderr},
+  {"info", "%F %T %-4L ",      "%n", io.stderr},
+  {"dbg",  "%F %T (%S) %-4L ", "%n", io.stderr},
   envvar = "SLLOG_LEVEL",  -- default environment variable
 }
 
 -- translate formating options for prefix and suffix to corresponding functions
 local lookup = {
   -- time and date from os.date extended with subsecond precision from socket.gettime
-  c = [[_fmttime("%c","<fmt>",modf(x:gettime()))]],  --  locale's date and time (e.g., Thu Mar  3 23:05:25 2005)
-  F = [[date("%F")]],                                --  full date; same as %Y-%m-%d
-  r = [[_fmttime("%r","<fmt>",modf(x:gettime()))]],  --  locale's 12-hour clock time (e.g., 11:11:04 PM)
-  T = [[_fmttime("%T","<fmt>",modf(x:gettime()))]],  --  time; same as %H:%M:%S
-  x = [[date("%x")]],                                --  locale's date representation (e.g., 12/31/99)
-  X = [[_fmttime("%X","<fmt>",modf(x:gettime()))]],  --  locale's time representation (e.g., 23:13:48)
+  c = [[_fmttime("%c","<fmt>",x:gettime())]],  --  locale's date and time (e.g., Thu Mar  3 23:05:25 2005)
+  F = [[date("%F", floor(x:gettime()))]],      --  full date; same as %Y-%m-%d
+  r = [[_fmttime("%r","<fmt>",x:gettime())]],  --  locale's 12-hour clock time (e.g., 11:11:04 PM)
+  T = [[_fmttime("%T","<fmt>",x:gettime())]],  --  time; same as %H:%M:%S
+  x = [[date("%x", floor(x:gettime()))]],      --  locale's date representation (e.g., 12/31/99)
+  X = [[_fmttime("%X","<fmt>",x:gettime())]],  --  locale's time representation (e.g., 23:13:48)
 
   -- elapsed time since start; since previous log
-  e = [[sfmt('%<fmt>f', x:getelapsed())]],              -- in seconds (e.g., 0.424024)
-  E = [[_fmttime("!%T","<fmt>",modf(x:getelapsed()))]], -- in seconds %H:%M:%S.000
-  p = [[sfmt('%<fmt>f', x:gettprev())]],                -- in seconds (e.g., 0.424024)
-  P = [[_fmttime("!%T","<fmt>",modf(x:gettprev()))]],   -- in seconds %H:%M:%S.000
+  e = [[sfmt("%<fmt>f", x:getelapsed())]],        -- in seconds (e.g., 0.424024)
+  E = [[_fmttime("!%T","<fmt>",x:getelapsed())]], -- in seconds %H:%M:%S.000
+  p = [[sfmt("%<fmt>f", x:gettprev())]],          -- in seconds (e.g., 0.424024)
+  P = [[_fmttime("!%T","<fmt>",x:gettprev())]],   -- in seconds %H:%M:%S.000
 
   -- level
   l = [[lvl or 0]],                                     -- level number
-  L = [[sfmt('%<fmt>s', x._levels[lvl].name or '')]],   -- level name
+  L = [[sfmt("%<fmt>s", x._levels[lvl].name or "")]],   -- level name
 
   -- debug, lf
   S = [[_getdebug(x)]],                                 -- module:line
@@ -113,17 +119,17 @@ local lookup = {
   b = [[sfmt('%<fmt>i', floor(collectgarbage("count")*1024))]],  -- memory in bytes
 }
 
--- isolate environment for (factory)
+-- environment for (factory)
 local fenv = {
-  modf=math.modf, floor=math.floor,
-  date=os.date, pconfig=package.config,
+  floor=math.floor,
+  date=os.date, time=os.time, pconfig=package.config,
   sfmt=string.format, tconcat=table.concat,
   collectgarbage=collectgarbage
 }
 
--- convert time to string and add fractions of seconds
--- luacheck: ignore 212
-function fenv._fmttime(fmt, prec, sec, frac)
+-- convert time to string using os.date and add fractions of seconds
+function fenv._fmttime(fmt, prec, time)
+  local sec, frac = math.modf(time)
   prec = ((tostring(prec) or "0"):gsub("%.", ""))
   local fpart = string.format("%0."..prec.."f",frac)
   local carry = tonumber(fpart:sub(1,1))
@@ -133,16 +139,15 @@ end
 -- get module name and line number as a string
 function fenv._getdebug(self)
   local req = self._require or require
-  local getinfo = req "debug".getinfo
-  local t = getinfo(5,"Sl")
+  local t = req "debug".getinfo(5,"Sl")
   return (t.short_src:match("([^/]*).lua$") or "")..":"..(t.currentline or "")
 end
 
 -- get name of the calling function with leading space or empty string
 function fenv._getcaller(self)
   local req = self._require or require
-  local r = req "debug".getinfo(5).name
-  return r and " "..r.."()" or ""
+  local fname = req "debug".getinfo(5).name
+  return fname and " "..fname.."()" or ""
 end
 
 -- factory that builds function for formating prefix and suffix
@@ -203,7 +208,6 @@ local function getlevelidx(self, lvl)
 end
 
 -- fetch level index from provided string or number or environment variable
--- also return message describing where lvl was defined
 local function fetchlevel(self, lvl, msg)
   lvl = getlevelidx(self, lvl)
   msg = msg or "level=%s"
@@ -216,11 +220,13 @@ local function fetchlevel(self, lvl, msg)
       lvl = 0
     end
   end
-  return lvl, msg or ""  -- lvl is always number
+  lvl = lvl < 0 and 0 or lvl
+  lvl = math.min(lvl, #self._levels)
+  return lvl, msg or ""  -- lvl is always number normalized to levels range
 end
 
 -- initialization; can be called multiple times to change settings
-function logger:init(settings) -- table just like 'default' above
+function logger:init(settings) -- table just like 'default' at the top
   assert(type(settings)=="table","table containing list of levels and settings expected")
   self._report = settings.report or self._report
   self._envvar = settings.envvar or self._envvar
@@ -247,9 +253,9 @@ function logger:init(settings) -- table just like 'default' above
     self._require = nil
   end
 
-  -- initialize new levels
+  -- initialize new levels from settings
   if #settings > 0 then
-    -- erase existing ones
+    -- remove existing levels
     for key in pairs(self) do
       if type(key) == "number" or key:sub(1,1) ~= "_" then
         self[key] = nil
@@ -333,18 +339,18 @@ function logger:log(lvl, ...) -- level number; ... desired output
     handle:write(p.prefix(self))
     handle:write(...)
     handle:write(p.suffix(self))
+    local x = self:gettime()
+    self._tprev = x % 1 == 0 and os.clock() or x
   end
-  local x = self:gettime()
-  self._tprev = x % 1 == 0 and os.clock() or x
 end
 
 -- make log method callable by object name
-logger.__call = function(self,...)
+function logger:__call(...)
   self:log(...)
 end
 
 -- make sure open file handles are closed and 'require' is restored
-logger.__gc = function (self)
+function logger:__gc()
   for _, v in ipairs(self._levels or E) do
     if io.type(v.handle) == "file" and
        v.handle ~= io.stdout and
@@ -353,7 +359,6 @@ logger.__gc = function (self)
     end
   end
   _G["require"] = self._require or _G["require"]
-  print("fin done")
 end
 
 -- Lua 5.1 does not support __gc on tables, so we need to use newproxy
