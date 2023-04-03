@@ -1,6 +1,7 @@
 # sllog 0.1 Simple line logger
 
-[![License](https://img.shields.io/:license-mit-blue.svg)](https://mit-license.org)
+[![License](https://img.shields.io/:license-mit-blue.svg)](https://mit-license.org) 
+[![test](https://github.com/smi11/sllog-lua/actions/workflows/test.yml/badge.svg)](https://github.com/smi11/sllog-lua/actions/workflows/test.yml)
 
 Simple line logger. You can define prefix and suffix for each log message. Both
 allow various tags for date, time, elapsed time, level, debug info and memory
