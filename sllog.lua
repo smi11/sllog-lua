@@ -38,7 +38,7 @@
   {"warn", "%F %T %-4L ",        "%n", io.stderr},
   {"info", "%F %T %-4L ",        "%n", io.stderr},
   {"dbg",  "%F %T (%S) %-4L%f ", "%n", io.stderr},
-  timefn=(socket or {}).gettime  -- use socket.gettime if available
+  timefn=(socket or {}).gettime,  -- use socket.gettime if available
   report="dbg",       -- to which level should internal log events be passed?
   hookrequire=true,   -- also report calls to require()
   level="dbg"         -- output levels up to and including "dbg"
@@ -76,7 +76,11 @@ local HOOKMSG = 'require "%s"'                    -- message when hooked require
 
 -- safe navigation E and logger object
 local E = {}
-local logger = {_VERSION = "sllog 0.2"}
+local logger = {}
+if _VERSION == "Lua 5.1" then
+  logger = getmetatable(newproxy(true)) -- use newproxy because of __gc
+end
+logger._VERSION = "sllog 0.2"
 logger.__index = logger
 
 -- table containing default settings and list of levels to be used with logger:init()
@@ -154,8 +158,8 @@ end
 local function format_factory(str, lvl)
   local code = {
     "return function(x)",
-    "local lvl="..lvl,
-    "local t = {}",
+    " local lvl="..lvl,
+    " local t = {}",
   }
   local i = 1
   local s, e, val, ss
@@ -164,12 +168,12 @@ local function format_factory(str, lvl)
     if s then
       ss = str:sub(i,s-1) -- substring before tag
       if #ss > 0 then
-        code[#code+1] = string.format("t[#t+1] = %q", ss)
+        code[#code+1] = string.format(" t[#t+1] = %q", ss)
       end
       local chr = val:sub(-1)
       local fmt = val:sub(2,-2) or ""
       if lookup[chr] then -- replace tag with appropriate lua code
-        code[#code+1] = "t[#t+1] = " .. lookup[chr]:gsub("<fmt>", fmt)
+        code[#code+1] = " t[#t+1] = " .. lookup[chr]:gsub("<fmt>", fmt)
       end
       i = e + 1
     else -- part of str after last tag
@@ -181,8 +185,8 @@ local function format_factory(str, lvl)
     end
   end -- while
 
-  code[#code+1] = "return tconcat(t)"
-  code[#code+1] = "end"
+  code[#code+1] = " return tconcat(t)"
+  code[#code+1] = " end"
 
   local index = 0
   local function reader()
@@ -225,6 +229,7 @@ local function fetchlevel(self, lvl, msg)
   return lvl, msg or ""  -- lvl is always number normalized to levels range
 end
 
+--local inspect = require "inspect"
 -- initialization; can be called multiple times to change settings
 function logger:init(settings) -- table just like 'default' at the top
   assert(type(settings)=="table","table containing list of levels and settings expected")
@@ -361,19 +366,8 @@ function logger:__gc()
   _G["require"] = self._require or _G["require"]
 end
 
--- Lua 5.1 does not support __gc on tables, so we need to use newproxy
-local function setmeta(mt)
-  if _G._VERSION == "Lua 5.1" then
-    local u = newproxy(false)
-    require "debug".setmetatable(u, mt)
-    return u
-  else
-    return setmetatable({}, mt)
-  end
-end
-
 -- create instance of logger object and return it as a module table
-return setmeta(logger):init(default)
+return setmetatable({}, logger):init(default)
 
 --[[
 
