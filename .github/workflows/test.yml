@@ -4,6 +4,10 @@ on: [push]
 
 jobs:
   test:
+    strategy:
+      fail-fast: false
+      matrix:
+        luaVersion: ["5.1", "5.2", "5.3", "5.4", "luajit"]
     runs-on: ubuntu-latest
 
     steps:
@@ -11,7 +15,7 @@ jobs:
 
     - uses: leafo/gh-actions-lua@v10
       with:
-        luaVersion: "5.3.5"
+        luaVersion: ${{ matrix.luaVersion }}
 
     - uses: leafo/gh-actions-luarocks@v4
 
