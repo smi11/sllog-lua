@@ -1,39 +1,38 @@
 --[[
+sllog 0.2 Simple line logger
+no warranty implied; use at your own risk
 
- sllog 0.2 Simple line logger
- no warranty implied; use at your own risk
+Simple line logger. You can define prefix and suffix for each log message. Both
+allow various tags for date, time, elapsed time, level, debug info and memory
+usage so you can format your log as you wish.
 
- Simple line logger. You can define prefix and suffix for each log message. Both
- allow various tags for date, time, elapsed time, level, debug info and memory
- usage so you can format your log as you wish.
+Each log level can have its own formatting and can be output to different file
+handles. You can also hook require function to automatically log its use.
 
- Each log level can have its own formatting and can be output to different file
- handles. You can also hook require function to automatically log its use.
+If you need more precise timings, you can set sllog to use gettime() function
+from 'luasocket' or some other unix timestamp compatible library.
 
- If you need more precise timings, you can set sllog to use gettime() function
- from 'luasocket' or some other unix timestamp compatible library.
+Optionally you can colorize output by providing external function that converts
+color codes into ansi escape codes for prefix and suffix or insert them yourself
+before calling sslog:init().
 
- Optionally you can colorize output by providing external function that converts
- color codes into ansi escape codes for prefix and suffix or insert them yourself
- before calling sslog:init().
+Compatible with Lua 5.1+ and LuaJIT 2.0+
 
- Compatible with Lua 5.1+ and LuaJIT 2.0+
+author: Milan Slunečko
+url: https://github.com/smi11/sllog-lua
 
- author: Milan Slunečko
- url: https://github.com/smi11/sllog-lua
+DEPENDENCY
 
- DEPENDENCY
+Lua 5.1+ or LuaJIT 2.0+
 
- Lua 5.1+ or LuaJIT 2.0+
+Optionally:
+- luasocket (for more precise gettime() function)
+- eansi or some other color library (for colorizing output)
 
- Optionally:
-  - luasocket (for more precise gettime() function)
-  - eansi or some other color library (for colorizing output)
+BASIC USAGE
 
- BASIC USAGE
-
- -- level name, prefix, suffix, file handle
- local log = require "sllog":init{
+-- level name, prefix, suffix, file handle
+local log = require "sllog":init{
   {"err",  "%F %T %-4L ",        "%n", io.stderr},
   {"warn", "%F %T %-4L ",        "%n", io.stderr},
   {"info", "%F %T %-4L ",        "%n", io.stderr},
@@ -44,30 +43,30 @@
   level="dbg"         -- output levels up to and including "dbg"
 }
 
- -- you can specify level either by index or name
- log(3, "some message")
- log[3]("some message")
- log:info("same as previous line, but using name")
- log("info", "also same as previous lines")
+-- you can specify level either by index or name
+log(3, "some message")
+log[3]("some message")
+log:info("same as previous line, but using name")
+log("info", "also same as previous lines")
 
- local x = 123
- log:dbg("my var is ", x)
+local x = 123
+log:dbg("my var is ", x)
 
- See README.md for documentation
+See README.md for documentation
 
- HISTORY
+HISTORY
 
- 0.2 < active
-      - finalized settings, methods and module structure
-      - refactor all code
+0.2 < active
+    - finalized settings, methods and module structure
+    - refactor all code
+    - fixed compatibility issues with Lua 5.1 and Lua 5.4
 
- 0.1
-      - first draft
+0.1
+    - first draft
 
- LICENSE
+LICENSE
 
- MIT License. See end of file for full text.
-
+MIT License. See end of file for full text.
 --]]
 
 -- constants
@@ -78,7 +77,7 @@ local HOOKMSG = 'require "%s"'                    -- message when hooked require
 local E = {}
 local logger = {}
 if _VERSION == "Lua 5.1" then
-  logger = getmetatable(newproxy(true)) -- use newproxy because of __gc
+  logger = getmetatable(newproxy(true)) -- hack for __gc metamethod in Lua 5.1
 end
 logger._VERSION = "sllog 0.2"
 logger.__index = logger

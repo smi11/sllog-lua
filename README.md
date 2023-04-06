@@ -1,4 +1,4 @@
-# sllog 0.1 Simple line logger
+# sllog 0.2 Simple line logger
 
 [![License](https://img.shields.io/:license-mit-blue.svg)](https://mit-license.org) 
 [![test](https://github.com/smi11/sllog-lua/actions/workflows/test.yml/badge.svg)](https://github.com/smi11/sllog-lua/actions/workflows/test.yml)
@@ -50,6 +50,11 @@ log:debug("my var is ", x)
 ```
 
 ## HISTORY
+
+0.2 < active
+    - finalized settings, methods and module structure
+    - refactor all code
+    - fixed compatibility issues with Lua 5.1 and Lua 5.4
 
 0.1 < active
     - first draft
