@@ -49,20 +49,32 @@ log[3]("some message")
 log:info("same as previous line, but using name")
 log("info", "also same as previous lines")
 
-local x = 123
-log:dbg("my var is ", x)
+-- log uses io.write so same rules apply
+local n = 123
+local b = true
+log:dbg("my var n = ", n, " and b = ", tostring(b))
+
+-- output any Lua value including tables with cycles and metatables
+local t = setmetatable({1, 2, 3, sub_t={"Hello, ", "world"}}, {__mode="kv"})
+t[123] = t
+log:vardump("t", t)
 
 See README.md for documentation
 
 HISTORY
 
 0.2 < active
-    - finalized settings, methods and module structure
-    - refactor all code
-    - fixed compatibility issues with Lua 5.1 and Lua 5.4
+
+- finalized settings, methods and module structure
+- refactor all code
+- fixed compatibility issues with Lua 5.1 and Lua 5.4
+- added memoize for generating prefix and suffix functions
+- added dumpvar() method
+- added pad option
 
 0.1
-    - first draft
+
+- first draft
 
 LICENSE
 
@@ -154,10 +166,9 @@ function fenv._getcaller(self)
 end
 
 -- factory that builds function for formating prefix and suffix
-local function format_factory(str, lvl)
+local function format_factory(str)
   local code = {
-    "return function(x)",
-    " local lvl="..lvl,
+    "return function(x, lvl)",
     " local t = {}",
   }
   local i = 1
@@ -202,36 +213,51 @@ local function format_factory(str, lvl)
   end
 end
 
+-- memoize for format_factory
+local function memoize(f)
+  local memo = setmetatable({}, {__mode="kv"})
+  return function (x)
+    local r = memo[x]
+    if r == nil then
+      r = f(x)
+      memo[x] = r
+    end
+    return r
+  end
+end
+
+format_factory = memoize(format_factory)
+
 -- get level index or nil
 local function getlevelidx(self, lvl)
   lvl = tonumber(lvl) or (self._levels[lvl] or E).index or lvl
   lvl = lvl ~= false and lvl or nil
-  assert(type(lvl)=="number" or lvl==nil, "valid level number, name or nil expected")
+  assert(type(lvl)=="number" or lvl==nil, "valid level index, level name or nil expected")
+  lvl = lvl and lvl < 0 and 0 or lvl
   return lvl
 end
 
 -- fetch level index from provided string or number or environment variable
 local function fetchlevel(self, lvl, msg)
   lvl = getlevelidx(self, lvl)
-  msg = msg or "level=%s"
+  msg = msg or "setlevel(%s)"
   if not lvl then
     local env = os.getenv(self._envvar)
     if env then
       lvl = getlevelidx(self, env)
-      msg = (msg or "") .. " -- os.getenv('%s')"
+      msg = msg .. " -- os.getenv('%s')"
     else
       lvl = 0
     end
   end
-  lvl = lvl < 0 and 0 or lvl
-  lvl = math.min(lvl, #self._levels)
-  return lvl, msg or ""  -- lvl is always number normalized to levels range
+  lvl = math.min(lvl, #self._levels) -- lvl normalized to levels range
+  return lvl, msg or ""
 end
 
---local inspect = require "inspect"
 -- initialization; can be called multiple times to change settings
 function logger:init(settings) -- table just like 'default' at the top
-  assert(type(settings)=="table","table containing list of levels and settings expected")
+  assert(type(settings)=="table", "settings table expected")
+  self._pad    = settings.pad or self._pad or " "
   self._report = settings.report or self._report
   self._envvar = settings.envvar or self._envvar
   local tf = self._timefn
@@ -271,25 +297,28 @@ function logger:init(settings) -- table just like 'default' at the top
     for i, v in ipairs(settings) do
       local name = v[1]
       t[i] = {name=name, index=i, handle=v[4],
-              prefix=format_factory(colorizefn(v[2]), i),
-              suffix=format_factory(colorizefn(v[3]), i)}
+              prefix=format_factory(colorizefn(v[2])),
+              suffix=format_factory(colorizefn(v[3]))}
       assert(t[name] == nil, "duplicate level name")
       t[name] = t[i]
-      self[name] = function(x, ...) x:log(i,...) end -- log:name(...) named levels
-      self[i] = function(...) self:log(i,...) end    -- log[index](...) levels by index
+      self[name] = function(x, ...) x:log(i,...) end -- log:name(...)
+      self[i] = function(...) self:log(i,...) end    -- log[index](...)
     end
     self._levels = t
   end
 
   -- report changed settings
-  local lvl, msg = fetchlevel(self, settings.level, ".level=%s")
-  self._level = lvl
-  self:_log(string.format(INITMSG, #settings))
   if settings.level ~= nil or #settings > 0 then
-    self:_log(string.format(msg, lvl, self._envvar))
+    local lvl, msg = fetchlevel(self, settings.level, ".level=%s")
+    self._level = lvl
+    self:_log(string.format(INITMSG, #settings))
+    self:_log(string.format(msg, self._level, self._envvar))
+  else
+    self:_log(string.format(INITMSG, #settings))
   end
-  if settings.report ~=nil then self:_log(".report=", self._report) end
-  if settings.envvar ~=nil then self:_log(".envvar=", self._envvar) end
+  if settings.pad    ~=nil then self:_log(string.format(".pad=%q", self._pad)) end
+  if settings.report ~=nil then self:_log(string.format(".report=%q", self._report)) end
+  if settings.envvar ~=nil then self:_log(string.format(".envvar=%q", self._envvar)) end
   if settings.timefn ~=nil then
     self:_log(".timefn=", tostring(settings.timefn ~= false and true),
               tf ~= self._timefn and " -- timer reset" or "")
@@ -338,13 +367,134 @@ end
 function logger:log(lvl, ...) -- level number; ... desired output
   lvl = getlevelidx(self, lvl)
   if type(lvl)=="number" and lvl > 0 and lvl <= self._level then
-    local p = self._levels[lvl]
+    local p, i = self._levels[lvl], self._levels[lvl].index
     local handle = p.handle
-    handle:write(p.prefix(self))
+    handle:write(p.prefix(self, i))
     handle:write(...)
-    handle:write(p.suffix(self))
+    handle:write(p.suffix(self, i))
     local x = self:gettime()
     self._tprev = x % 1 == 0 and os.clock() or x
+  end
+end
+
+-- split string on linefeed
+local function lfsplit(s, sep)
+  sep = sep or "\n"
+  local t={}
+  for str in string.gmatch(s, "([^"..sep.."]+)") do
+    table.insert(t, str)
+  end
+  return t
+end
+
+-- if Lua identifier return its string or nil otherwise
+local identifier
+do
+  local function set(list)
+    local t = {}
+    for _, l in ipairs(list) do t[l] = true end
+    return t
+  end
+  local reserved = set{
+    "and", "break", "do", "else", "elseif", "end", "false", "for", "function",
+    "goto", "if", "in", "local", "nil", "not", "or", "repeat", "return",
+    "then", "true", "until", "while"
+  }
+
+  function identifier(k)
+    return type(k) == "string" and k == string.match(k,"^[%a_][%w_]*$")
+           and not reserved[k] and k or nil
+  end
+end
+
+-- assure serializer sorts keys
+local function sorted_pairs(t)
+  local keys = {}
+  for k in pairs(t) do
+    table.insert(keys, k)
+  end
+  table.sort(keys, function (a, b)
+    if type(a) == "number" and type(b) == "number" then
+      return a < b
+    else
+      return tostring(a) < tostring(b)
+    end
+  end)
+  local i = 0
+  return function()
+    i = i + 1
+    if keys[i] == nil then
+      return nil
+    else
+      return keys[i], t[keys[i]]
+    end
+  end
+end
+
+-- serialize any Lua value including tables with cycles and metatables
+local function serialize(value, pad, depth, store)
+  pad = pad or "  "
+  depth = depth or 1
+  store = store or {}
+  local t = type(value)
+  if t == "nil" then
+    return "nil"
+  elseif t == "boolean" then
+    return value and "true" or "false"
+  elseif t == "number" then
+    return tostring(value)
+  elseif t == "string" then
+    return string.format("%q", value)
+  elseif t == "table" then
+    store.tables = store.tables or {}
+    local indent = string.rep(pad, depth-1)
+    if store.tables[value] then
+      return string.format("<table %i>", store.tables[value])
+    else
+      store.tables[#store.tables+1] = value
+      store.tables[value] = #store.tables
+      local result = string.format("<%i>{\n", store.tables[value])
+      local i = 1
+      for k, v in sorted_pairs(value) do
+        if k == i then
+          result = result .. indent .. pad .. serialize(v, pad, depth+1, store) .. ",\n"
+        else
+          local key = identifier(k) or "["..serialize(k, pad, depth+1, store).."]"
+          result = result .. indent .. pad .. key .. " = "
+                   .. serialize(v, pad, depth+1, store) .. ",\n"
+        end
+        i = i + 1
+      end
+      local mt = getmetatable(value)
+      if mt then
+        result = result .. indent .. pad .."<metatable> = "
+                 .. serialize(mt, pad, depth+1, store) .."\n"
+      end
+      return result .. indent .. "}"
+    end
+  elseif   t == 'function'
+        or t == 'thread'
+        or t == 'userdata' then
+    store[t] = store[t] or {}
+    if not store[t][value] then
+      store[t][#store[t]+1] = value
+      store[t][value] = #store[t]
+    end
+    return string.format("<%s %i>", t, store[t][value])
+  else
+    return "Cannot serialize a " .. t .. " value.\n"
+  end
+end
+
+-- show value of any variable
+function logger:vardump(name, value, lvl)
+  lvl = getlevelidx(self, lvl or self._report) or 0
+  if self._level >= lvl then
+    local out = lfsplit(serialize(value, self._pad or " "))
+    out[1] = name.." = "..(out[1] or "")
+    for _, v in ipairs(out) do
+      self:log(lvl, v)
+    end
   end
 end
 
