@@ -387,8 +387,8 @@ local function lfsplit(s, sep)
   return t
 end
 
--- if Lua identifier return its string or nil otherwise
-local identifier
+-- return string if Lua identifier or nil otherwise
+local isidentifier
 do
   local function set(list)
     local t = {}
@@ -401,13 +401,14 @@ do
     "then", "true", "until", "while"
   }
 
-  function identifier(k)
-    return type(k) == "string" and k == string.match(k,"^[%a_][%w_]*$")
-           and not reserved[k] and k or nil
+  function isidentifier(k)
+    return     type(k) == "string"
+           and      k  == string.match(k,"^[%a_][%w_]*$")
+           and not reserved[k]
   end
 end
 
--- assure serializer sorts keys
+-- sort keys for serializer
 local function sorted_pairs(t)
   local keys = {}
   for k in pairs(t) do
@@ -431,6 +432,24 @@ local function sorted_pairs(t)
   end
 end
 
+-- build output by concatenating all strings and then splitting them by lf
+local function out_factory()
+  local buf = {}
+  return function (s, ...)
+    if s == nil then
+      s = table.concat(buf)
+      buf = {}
+      return lfsplit(s)
+    end
+    buf[#buf+1] = s
+    for i = 1, select("#", ...) do
+      buf[#buf+1] = select(i, ...)
+    end
+  end
+end
+
+local out = out_factory()
+
 -- serialize any Lua value including tables with cycles and metatables
 local function serialize(value, pad, depth, store)
   pad = pad or "  "
@@ -438,39 +457,49 @@ local function serialize(value, pad, depth, store)
   store = store or {}
   local t = type(value)
   if t == "nil" then
-    return "nil"
+    out "nil"
   elseif t == "boolean" then
-    return value and "true" or "false"
+--    out(value and "true" or "false")
+    out(tostring(value))
   elseif t == "number" then
-    return tostring(value)
+    out(tostring(value))
   elseif t == "string" then
-    return string.format("%q", value)
+    out(string.format("%q", value))
   elseif t == "table" then
     store.tables = store.tables or {}
     local indent = string.rep(pad, depth-1)
     if store.tables[value] then
-      return string.format("<table %i>", store.tables[value])
+      out(string.format("<table %i>", store.tables[value]))
     else
       store.tables[#store.tables+1] = value
       store.tables[value] = #store.tables
-      local result = string.format("<%i>{\n", store.tables[value])
+      out(string.format("<%i>{\n", store.tables[value]))
       local i = 1
       for k, v in sorted_pairs(value) do
         if k == i then
-          result = result .. indent .. pad .. serialize(v, pad, depth+1, store) .. ",\n"
+          out(indent .. pad)
+          serialize(v, pad, depth+1, store)
+          out(",\n")
         else
-          local key = identifier(k) or "["..serialize(k, pad, depth+1, store).."]"
-          result = result .. indent .. pad .. key .. " = "
-                   .. serialize(v, pad, depth+1, store) .. ",\n"
+          if isidentifier(k) then
+            out(indent, pad, k, " = ")
+          else
+            out(indent, pad, "[")
+            serialize(k, pad, depth+1, store)
+            out("]", " = ")
+          end
+          serialize(v, pad, depth+1, store)
+          out(",\n")
         end
         i = i + 1
       end
       local mt = getmetatable(value)
       if mt then
-        result = result .. indent .. pad .."<metatable> = "
-                 .. serialize(mt, pad, depth+1, store) .."\n"
+        out(indent, pad, "<metatable> = ")
+        serialize(mt, pad, depth+1, store)
+        out("\n")
       end
-      return result .. indent .. "}"
+      out(indent, "}")
     end
   elseif   t == 'function'
         or t == 'thread'
@@ -480,9 +509,9 @@ local function serialize(value, pad, depth, store)
       store[t][#store[t]+1] = value
       store[t][value] = #store[t]
     end
-    return string.format("<%s %i>", t, store[t][value])
+    out(string.format("<%s %i>", t, store[t][value]))
   else
-    return "Cannot serialize a " .. t .. " value.\n"
+    out("Cannot serialize a ", t, " value.\n")
   end
 end
 
@@ -490,9 +519,10 @@ end
 function logger:vardump(name, value, lvl)
   lvl = getlevelidx(self, lvl or self._report) or 0
   if self._level >= lvl then
-    local out = lfsplit(serialize(value, self._pad or " "))
-    out[1] = name.." = "..(out[1] or "")
-    for _, v in ipairs(out) do
+    out(name, " = ")
+    serialize(value, self._pad or " ")
+    local buf = out()
+    for _, v in ipairs(buf) do
       self:log(lvl, v)
     end
   end

@@ -35,6 +35,7 @@ insulate("require 'sllog'", function()
     assert.equal(expected or 0,log._level)
     assert.equal("SLLOG_LEVEL",log._envvar)
     assert.equal(os.time,log._timefn)
+    assert.equal(" ",log._pad)
     assert.equal(nil,log._report)
     assert.equal(nil,log._hookrequire)
     assert.equal(req,require)
@@ -50,7 +51,7 @@ insulate("method init()", function()
   local req = _G["require"]
 
   it("should report error", function()
-    assert.has_error(function() log:init() end, "table containing list of levels and settings expected")
+    assert.has_error(function() log:init() end, "settings table expected")
   end)
 
   it("should patch 'require'", function()
@@ -69,14 +70,24 @@ insulate("method init()", function()
     assert.equal(f, log._timefn)
   end)
 
+  it("should clear timefn", function()
+    log:init{timefn=false}
+    assert.equal(os.time, log._timefn)
+  end)
+
+  it("should set pad character", function()
+    log:init{pad="··"}
+    assert.equal("··", log._pad)
+  end)
+
   it("should set report level", function()
     log:init{report=0}
     assert.equal(0, log._report)
   end)
 
   it("should set level", function()
-    log:init{level=1}
-    assert.equal(1, log:getlevel())
+    log:init{level=3}
+    assert.equal(3, log:getlevel())
   end)
 
   if envvar then
@@ -132,28 +143,47 @@ insulate("method init()", function()
     f:close()
     assert.equal("2023-03-21 10:20:30.123 test init() -- 1 levels initialized;"..
                  "2023-03-21 10:20:30.123 test .level=1;"..
-                 "2023-03-21 10:20:30.123 test .report=test;"..
+                 '2023-03-21 10:20:30.123 test .report="test";'..
                  "2023-03-21 10:20:30.123 test .timefn=true -- timer reset;"..
                  "2023-03-21 10:20:30.123 test setlevel(1);",s)
   end)
 end)
 
-insulate("method setlevel()", function()
+insulate("method setlevel()&getlevel()", function()
   local log = require "sllog"
 
-  it("should set level", function()
+  it("should set/get level", function()
+    log:setlevel(-1000)
+    assert.equal(0, log:getlevel())
+    log:setlevel(0)
+    assert.equal(0, log:getlevel())
     log:setlevel(1)
     assert.equal(1, log:getlevel())
     log:setlevel("err")
     assert.equal(1, log:getlevel())
     log:setlevel("dbg")
     assert.equal(4, log:getlevel())
+    log:setlevel(1000)
+    assert.equal(4, log:getlevel())
+  end)
+
+  it("should report error", function()
+    assert.has_error(function() log:setlevel("nonexistent") end, "valid level index, level name or nil expected")
   end)
 
   if envvar then
     it("should set level from default envvar", function()
       log:setlevel()
       local expected = tonumber(envvar) or (log._levels[envvar] or {}).index
+      assert.equal(expected, log:getlevel())
+    end)
+  end
+
+  if envvarcustom then
+    it("should set level from custom envvar", function()
+      log:init{envvar="SLLOG_CUSTOM"}
+      log:setlevel()
+      local expected = tonumber(envvarcustom) or (log._levels[envvarcustom] or {}).index
       assert.equal(expected, log:getlevel())
     end)
   end
@@ -192,12 +222,12 @@ describe("prefix", function()
   testprefix("%3r",   "12h time", 0.98765, '10:20:30.988 AM')
   testprefix("%T",    "time", 0.98765, '10:20:31')
   testprefix("%X",    "time", 0.123, '10:20:30')
-  testprefix("%e",    "elasped time", 0.000001, '0.000001')
-  testprefix("%7.3e", "elasped time", 20.123, ' 20.123')
-  testprefix("%.3e",  "elasped time", 0.98765, '0.988')
-  testprefix("%E",    "elasped time", 0.000001, '00:00:00')
-  testprefix("%1E",   "elasped time", 20.12345, '00:00:20.1')
-  testprefix("%3E",   "elasped time", 123456.98765, '10:17:36.988')
+  testprefix("%e",    "elapsed time", 0.000001, '0.000001')
+  testprefix("%7.3e", "elapsed time", 20.123, ' 20.123')
+  testprefix("%.3e",  "elapsed time", 0.98765, '0.988')
+  testprefix("%E",    "elapsed time", 0.000001, '00:00:00')
+  testprefix("%1E",   "elapsed time", 20.12345, '00:00:20.1')
+  testprefix("%3E",   "elapsed time", 123456.98765, '10:17:36.988')
   testprefix("%.3p",  "delta time", 123.4567, '123.457')
   testprefix("%.1P",  "delta time", 123.90765, '00:02:03.9')
   testprefix("%l",    "level number", 0, '1')
@@ -209,4 +239,208 @@ describe("prefix", function()
   testprefix("%b",    "memory in bytes", 0, 'number')
   testprefix("%F %3E %.2k Kb %S%f",    "all combined", 0.123,
              '^2023%-03%-21 00:00:00.123 %d+.%d%d Kb sllog_spec:3 mylog()')
+end)
+
+describe("method log()", function()
+  local log = require "sllog"
+
+  it("should produce output", function()
+    local f = io.tmpfile()
+    local now = {year=2023,month=3,day=21,hour=10,min=20,sec=30}
+    log:init{
+      {"err",  "%F %2T %-4L ", ";", f},
+      {"warn", "%F %2T %-4L ", ";", f},
+      {"info", "%F %2T %-4L ", ";", f},
+      {"dbg",  "%F %2T %-4L ", ";", f},
+      timefn=function() return os.time(now) + 0.987 end,
+      report=4,
+      level=4,
+    }
+    log:err("err message")
+    log:warn("warn message")
+    log:info("info message")
+    log:dbg("dbg message")
+    log:setlevel(2)
+    log:err("err message")
+    log:warn("warn message")
+    log:info("info message")
+    log:dbg("dbg message")
+    log:setlevel(0)
+    log:err("err message")
+    log:warn("warn message")
+    log:info("info message")
+    log:dbg("dbg message")
+    f:seek("set",0)
+    local s = f:read("*all")
+    f:close()
+    assert.equal('2023-03-21 10:20:30.99 dbg  init() -- 4 levels initialized;' ..
+                 '2023-03-21 10:20:30.99 dbg  .level=4;' ..
+                 '2023-03-21 10:20:30.99 dbg  .report=4;' ..
+                 '2023-03-21 10:20:30.99 dbg  .timefn=true -- timer reset;' ..
+                 '2023-03-21 10:20:30.99 err  err message;' ..
+                 '2023-03-21 10:20:30.99 warn warn message;' ..
+                 '2023-03-21 10:20:30.99 info info message;' ..
+                 '2023-03-21 10:20:30.99 dbg  dbg message;' ..
+                 '2023-03-21 10:20:30.99 err  err message;' ..
+                 '2023-03-21 10:20:30.99 warn warn message;', s)
+  end)
+end)
+
+describe("method vardump()", function()
+  local log = require "sllog"
+
+  it("should serialize variable", function()
+    local f = io.tmpfile()
+    local now = {year=2023,month=3,day=21,hour=10,min=20,sec=30}
+    log:init{
+      {"err",  "%-4L ", ";", f},
+      {"warn", "%-4L ", ";", f},
+      {"info", "%-4L ", ";", f},
+      {"dbg",  "%-4L ", ";", f},
+      timefn=function() return os.time(now) + 0.987 end,
+      report=4,
+      level=4,
+    }
+    log:vardump("log", log)
+    log:vardump("log", log, 1)
+    f:seek("set",0)
+    local s = f:read("*all")
+    f:close()
+    assert.equal('dbg  init() -- 4 levels initialized;'..
+                 'dbg  .level=4;'..
+                 'dbg  .report=4;'..
+                 'dbg  .timefn=true -- timer reset;'..
+                 'dbg  log = <1>{;'..
+                 'dbg   <function 1>,;'..
+                 'dbg   <function 2>,;'..
+                 'dbg   <function 3>,;'..
+                 'dbg   <function 4>,;'..
+                 'dbg   _envvar = "SLLOG_LEVEL",;'..
+                 'dbg   _level = 4,;'..
+                 'dbg   _levels = <2>{;'..
+                 'dbg    <3>{;'..
+                 'dbg     handle = <userdata 1>,;'..
+                 'dbg     index = 1,;'..
+                 'dbg     name = "err",;'..
+                 'dbg     prefix = <function 5>,;'..
+                 'dbg     suffix = <function 6>,;'..
+                 'dbg    },;'..
+                 'dbg    <4>{;'..
+                 'dbg     handle = <userdata 1>,;'..
+                 'dbg     index = 2,;'..
+                 'dbg     name = "warn",;'..
+                 'dbg     prefix = <function 5>,;'..
+                 'dbg     suffix = <function 6>,;'..
+                 'dbg    },;'..
+                 'dbg    <5>{;'..
+                 'dbg     handle = <userdata 1>,;'..
+                 'dbg     index = 3,;'..
+                 'dbg     name = "info",;'..
+                 'dbg     prefix = <function 5>,;'..
+                 'dbg     suffix = <function 6>,;'..
+                 'dbg    },;'..
+                 'dbg    <6>{;'..
+                 'dbg     handle = <userdata 1>,;'..
+                 'dbg     index = 4,;'..
+                 'dbg     name = "dbg",;'..
+                 'dbg     prefix = <function 5>,;'..
+                 'dbg     suffix = <function 6>,;'..
+                 'dbg    },;'..
+                 'dbg    dbg = <table 6>,;'..
+                 'dbg    err = <table 3>,;'..
+                 'dbg    info = <table 5>,;'..
+                 'dbg    warn = <table 4>,;'..
+                 'dbg   },;'..
+                 'dbg   _pad = " ",;'..
+                 'dbg   _report = 4,;'..
+                 'dbg   _timefn = <function 7>,;'..
+                 'dbg   _tprev = 1679390430.987,;'..
+                 'dbg   _tstart = 1679390430.987,;'..
+                 'dbg   dbg = <function 8>,;'..
+                 'dbg   err = <function 9>,;'..
+                 'dbg   info = <function 10>,;'..
+                 'dbg   warn = <function 11>,;'..
+                 'dbg   <metatable> = <7>{;'..
+                 'dbg    _VERSION = "sllog 0.2",;'..
+                 'dbg    __call = <function 12>,;'..
+                 'dbg    __gc = <function 13>,;'..
+                 'dbg    __index = <table 7>,;'..
+                 'dbg    _log = <function 14>,;'..
+                 'dbg    getelapsed = <function 15>,;'..
+                 'dbg    getlevel = <function 16>,;'..
+                 'dbg    gettime = <function 17>,;'..
+                 'dbg    gettprev = <function 18>,;'..
+                 'dbg    init = <function 19>,;'..
+                 'dbg    log = <function 20>,;'..
+                 'dbg    setlevel = <function 21>,;'..
+                 'dbg    vardump = <function 22>,;'..
+                 'dbg   };'..
+                 'dbg  };'..
+                 'err  log = <1>{;'..
+                 'err   <function 1>,;'..
+                 'err   <function 2>,;'..
+                 'err   <function 3>,;'..
+                 'err   <function 4>,;'..
+                 'err   _envvar = "SLLOG_LEVEL",;'..
+                 'err   _level = 4,;'..
+                 'err   _levels = <2>{;'..
+                 'err    <3>{;'..
+                 'err     handle = <userdata 1>,;'..
+                 'err     index = 1,;'..
+                 'err     name = "err",;'..
+                 'err     prefix = <function 5>,;'..
+                 'err     suffix = <function 6>,;'..
+                 'err    },;'..
+                 'err    <4>{;'..
+                 'err     handle = <userdata 1>,;'..
+                 'err     index = 2,;'..
+                 'err     name = "warn",;'..
+                 'err     prefix = <function 5>,;'..
+                 'err     suffix = <function 6>,;'..
+                 'err    },;'..
+                 'err    <5>{;'..
+                 'err     handle = <userdata 1>,;'..
+                 'err     index = 3,;'..
+                 'err     name = "info",;'..
+                 'err     prefix = <function 5>,;'..
+                 'err     suffix = <function 6>,;'..
+                 'err    },;'..
+                 'err    <6>{;'..
+                 'err     handle = <userdata 1>,;'..
+                 'err     index = 4,;'..
+                 'err     name = "dbg",;'..
+                 'err     prefix = <function 5>,;'..
+                 'err     suffix = <function 6>,;'..
+                 'err    },;'..
+                 'err    dbg = <table 6>,;'..
+                 'err    err = <table 3>,;'..
+                 'err    info = <table 5>,;'..
+                 'err    warn = <table 4>,;'..
+                 'err   },;'..
+                 'err   _pad = " ",;'..
+                 'err   _report = 4,;'..
+                 'err   _timefn = <function 7>,;'..
+                 'err   _tprev = 1679390430.987,;'..
+                 'err   _tstart = 1679390430.987,;'..
+                 'err   dbg = <function 8>,;'..
+                 'err   err = <function 9>,;'..
+                 'err   info = <function 10>,;'..
+                 'err   warn = <function 11>,;'..
+                 'err   <metatable> = <7>{;'..
+                 'err    _VERSION = "sllog 0.2",;'..
+                 'err    __call = <function 12>,;'..
+                 'err    __gc = <function 13>,;'..
+                 'err    __index = <table 7>,;'..
+                 'err    _log = <function 14>,;'..
+                 'err    getelapsed = <function 15>,;'..
+                 'err    getlevel = <function 16>,;'..
+                 'err    gettime = <function 17>,;'..
+                 'err    gettprev = <function 18>,;'..
+                 'err    init = <function 19>,;'..
+                 'err    log = <function 20>,;'..
+                 'err    setlevel = <function 21>,;'..
+                 'err    vardump = <function 22>,;'..
+                 'err   };'..
+                 'err  };', s)
+  end)
 end)
