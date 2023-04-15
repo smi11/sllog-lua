@@ -81,6 +81,14 @@ LICENSE
 MIT License. See end of file for full text.
 --]]
 
+local sformat = string.format
+local smatch = string.match
+local sgmatch = string.gmatch
+local tconcat = table.concat
+local tostring = tostring
+local tonumber = tonumber
+local debug = require "debug"
+
 -- constants
 local INITMSG = "init() -- %s levels initialized" -- message when init() is called
 local HOOKMSG = 'require "%s"'                    -- message when hooked require is called
@@ -125,8 +133,8 @@ local lookup = {
   L = [[sfmt("%<fmt>s", x._levels[lvl].name or "")]],   -- level name
 
   -- debug, lf
-  S = [[_getdebug(x)]],                                 -- module:line
-  f = [[_getcaller(x)]],                                -- calling function name with leading space
+  S = [[_getdebug()]],                                  -- module:line
+  f = [[_getcaller()]],                                 -- calling function name with leading space
   n = [[pconfig:sub(1,1) == "\\" and "\r\n" or "\n"]],  -- os based crlf or lf
 
   -- memory
@@ -146,22 +154,20 @@ local fenv = {
 function fenv._fmttime(fmt, prec, time)
   local sec, frac = math.modf(time)
   prec = ((tostring(prec) or "0"):gsub("%.", ""))
-  local fpart = string.format("%0."..prec.."f",frac)
+  local fpart = sformat("%0."..prec.."f",frac)
   local carry = tonumber(fpart:sub(1,1))
   return (os.date(fmt,sec+carry):gsub(":%d%d%f[%s%z]", "%1"..fpart:gsub("^%d","")))
 end
 
 -- get module name and line number as a string
-function fenv._getdebug(self)
-  local req = self._require or require
-  local t = req "debug".getinfo(5,"Sl")
+function fenv._getdebug()
+  local t = debug.getinfo(5,"Sl")
   return (t.short_src:match("([^/]*).lua$") or "")..":"..(t.currentline or "")
 end
 
 -- get name of the calling function with leading space or empty string
-function fenv._getcaller(self)
-  local req = self._require or require
-  local fname = req "debug".getinfo(5).name
+function fenv._getcaller()
+  local fname = debug.getinfo(5).name
   return fname and " "..fname.."()" or ""
 end
 
@@ -178,7 +184,7 @@ local function format_factory(str)
     if s then
       ss = str:sub(i,s-1) -- substring before tag
       if #ss > 0 then
-        code[#code+1] = string.format(" t[#t+1] = %q", ss)
+        code[#code+1] = sformat(" t[#t+1] = %q", ss)
       end
       local chr = val:sub(-1)
       local fmt = val:sub(2,-2) or ""
@@ -189,7 +195,7 @@ local function format_factory(str)
     else -- part of str after last tag
       ss = str:sub(i)
       if #ss > 0 then
-        code[#code+1] = string.format("t[#t+1] = %q", ss)
+        code[#code+1] = sformat("t[#t+1] = %q", ss)
       end
       break
     end
@@ -274,7 +280,7 @@ function logger:init(settings) -- table just like 'default' at the top
     self._require = _G["require"]
     _G["require"] = function (module)
       if not package.loaded[module] then
-        self:_log(string.format(HOOKMSG, module))
+        self:_log(sformat(HOOKMSG, module))
       end
       return self._require(module)
     end
@@ -311,14 +317,14 @@ function logger:init(settings) -- table just like 'default' at the top
   if settings.level ~= nil or #settings > 0 then
     local lvl, msg = fetchlevel(self, settings.level, ".level=%s")
     self._level = lvl
-    self:_log(string.format(INITMSG, #settings))
-    self:_log(string.format(msg, self._level, self._envvar))
+    self:_log(sformat(INITMSG, #settings))
+    self:_log(sformat(msg, self._level, self._envvar))
   else
-    self:_log(string.format(INITMSG, #settings))
+    self:_log(sformat(INITMSG, #settings))
   end
-  if settings.pad    ~=nil then self:_log(string.format(".pad=%q", self._pad)) end
-  if settings.report ~=nil then self:_log(string.format(".report=%q", self._report)) end
-  if settings.envvar ~=nil then self:_log(string.format(".envvar=%q", self._envvar)) end
+  if settings.pad    ~=nil then self:_log(sformat(".pad=%q", self._pad)) end
+  if settings.report ~=nil then self:_log(sformat(".report=%q", self._report)) end
+  if settings.envvar ~=nil then self:_log(sformat(".envvar=%q", self._envvar)) end
   if settings.timefn ~=nil then
     self:_log(".timefn=", tostring(settings.timefn ~= false and true),
               tf ~= self._timefn and " -- timer reset" or "")
@@ -355,7 +361,7 @@ end
 function logger:setlevel(lvl, msg) -- number or string with valid level name
   lvl, msg = fetchlevel(self, lvl, msg)
   self._level = lvl
-  self:_log(string.format(msg, self._level, self._envvar))
+  self:_log(sformat(msg, self._level, self._envvar))
 end
 
 -- return current level number
@@ -381,8 +387,8 @@ end
 local function lfsplit(s, sep)
   sep = sep or "\n"
   local t={}
-  for str in string.gmatch(s, "([^"..sep.."]+)") do
-    table.insert(t, str)
+  for str in sgmatch(s, "([^"..sep.."]+)") do
+    t[#t+1] = str
   end
   return t
 end
@@ -403,7 +409,7 @@ do
 
   function isidentifier(k)
     return     type(k) == "string"
-           and      k  == string.match(k,"^[%a_][%w_]*$")
+           and      k  == smatch(k,"^[%a_][%w_]*$")
            and not reserved[k]
   end
 end
@@ -437,7 +443,7 @@ local function out_factory()
   local buf = {}
   return function (s, ...)
     if s == nil then
-      s = table.concat(buf)
+      s = tconcat(buf)
       buf = {}
       return lfsplit(s)
     end
@@ -459,34 +465,33 @@ local function serialize(value, pad, depth, store)
   if t == "nil" then
     out "nil"
   elseif t == "boolean" then
---    out(value and "true" or "false")
     out(tostring(value))
   elseif t == "number" then
     out(tostring(value))
   elseif t == "string" then
-    out(string.format("%q", value))
+    out(sformat("%q", value))
   elseif t == "table" then
     store.tables = store.tables or {}
     local indent = string.rep(pad, depth-1)
     if store.tables[value] then
-      out(string.format("<table %i>", store.tables[value]))
+      out(sformat("<table %i>", store.tables[value]))
     else
       store.tables[#store.tables+1] = value
       store.tables[value] = #store.tables
-      out(string.format("<%i>{\n", store.tables[value]))
+      out(sformat("<%i>{\n", store.tables[value]))
       local i = 1
       for k, v in sorted_pairs(value) do
+        out(indent, pad)
         if k == i then
-          out(indent .. pad)
           serialize(v, pad, depth+1, store)
           out(",\n")
         else
           if isidentifier(k) then
-            out(indent, pad, k, " = ")
+            out(k, " = ")
           else
-            out(indent, pad, "[")
+            out("[")
             serialize(k, pad, depth+1, store)
-            out("]", " = ")
+            out("] = ")
           end
           serialize(v, pad, depth+1, store)
           out(",\n")
@@ -509,7 +514,7 @@ local function serialize(value, pad, depth, store)
       store[t][#store[t]+1] = value
       store[t][value] = #store[t]
     end
-    out(string.format("<%s %i>", t, store[t][value]))
+    out(sformat("<%s %i>", t, store[t][value]))
   else
     out("Cannot serialize a ", t, " value.\n")
   end
