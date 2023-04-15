@@ -291,14 +291,13 @@ describe("method vardump()", function()
 
   it("should serialize variable", function()
     local f = io.tmpfile()
-    local now = {year=2023,month=3,day=21,hour=10,min=20,sec=30}
     log:init{
       {"err",  "%-4L ", ";", f},
       {"warn", "%-4L ", ";", f},
       {"info", "%-4L ", ";", f},
       {"dbg",  "%-4L ", ";", f},
-      timefn=function() return os.time(now) + 0.987 end,
-      report=4,
+      timefn=function() return 1679390430.987 end,
+      report="dbg",
       level=4,
     }
     log:vardump("log", log)
@@ -308,7 +307,7 @@ describe("method vardump()", function()
     f:close()
     assert.equal('dbg  init() -- 4 levels initialized;'..
                  'dbg  .level=4;'..
-                 'dbg  .report=4;'..
+                 'dbg  .report="dbg";'..
                  'dbg  .timefn=true -- timer reset;'..
                  'dbg  log = <1>{;'..
                  'dbg   <function 1>,;'..
@@ -352,7 +351,7 @@ describe("method vardump()", function()
                  'dbg    warn = <table 4>,;'..
                  'dbg   },;'..
                  'dbg   _pad = " ",;'..
-                 'dbg   _report = 4,;'..
+                 'dbg   _report = "dbg",;'..
                  'dbg   _timefn = <function 7>,;'..
                  'dbg   _tprev = 1679390430.987,;'..
                  'dbg   _tstart = 1679390430.987,;'..
@@ -418,7 +417,7 @@ describe("method vardump()", function()
                  'err    warn = <table 4>,;'..
                  'err   },;'..
                  'err   _pad = " ",;'..
-                 'err   _report = 4,;'..
+                 'err   _report = "dbg",;'..
                  'err   _timefn = <function 7>,;'..
                  'err   _tprev = 1679390430.987,;'..
                  'err   _tstart = 1679390430.987,;'..
