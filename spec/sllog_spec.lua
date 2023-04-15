@@ -253,7 +253,7 @@ describe("method log()", function()
       {"info", "%F %2T %-4L ", ";", f},
       {"dbg",  "%F %2T %-4L ", ";", f},
       timefn=function() return os.time(now) + 0.987 end,
-      report=4,
+      report="dbg",
       level=4,
     }
     log:err("err message")
@@ -275,7 +275,7 @@ describe("method log()", function()
     f:close()
     assert.equal('2023-03-21 10:20:30.99 dbg  init() -- 4 levels initialized;' ..
                  '2023-03-21 10:20:30.99 dbg  .level=4;' ..
-                 '2023-03-21 10:20:30.99 dbg  .report=4;' ..
+                 '2023-03-21 10:20:30.99 dbg  .report="dbg";' ..
                  '2023-03-21 10:20:30.99 dbg  .timefn=true -- timer reset;' ..
                  '2023-03-21 10:20:30.99 err  err message;' ..
                  '2023-03-21 10:20:30.99 warn warn message;' ..
