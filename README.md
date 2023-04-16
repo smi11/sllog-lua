@@ -226,6 +226,10 @@ If we do specify `lvl` then output will be made to that level.
 
 In all cases output will be made only if the `report` level or specified `lvl` is smaller or equal to threshold set by `setlevel`.
 
+## Examples
+
+There are few examples in folder `examples` demonstrating common functionality.
+
 ## HISTORY
 
 ### 0.2 < active
@@ -237,6 +241,7 @@ In all cases output will be made only if the `report` level or specified `lvl` i
 - added vardump() method
 - added pad option
 - added documentation to README.md
+- added examples
 
 ### 0.1 < active
 

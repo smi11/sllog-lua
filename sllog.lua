@@ -33,10 +33,10 @@ BASIC USAGE
 
 -- level name, prefix, suffix, file handle
 local log = require "sllog":init{
-  {"err",  "%F %T %-4L ",        "%n", io.stderr},
-  {"warn", "%F %T %-4L ",        "%n", io.stderr},
-  {"info", "%F %T %-4L ",        "%n", io.stderr},
-  {"dbg",  "%F %T (%S) %-4L%f ", "%n", io.stderr},
+  {"err",  "%F %T %-4L ",      "%n", io.stderr},
+  {"warn", "%F %T %-4L ",      "%n", io.stderr},
+  {"info", "%F %T %-4L ",      "%n", io.stderr},
+  {"dbg",  "%F %T %-4L (%S)%f ", "%n", io.stderr},
   timefn=(socket or {}).gettime,  -- use socket.gettime if available
   report="dbg",       -- to which level should internal log events be passed?
   hookrequire=true,   -- also report calls to require()
@@ -108,7 +108,7 @@ local default = {
   {"err",  "%F %T %-4L ",      "%n", io.stderr},
   {"warn", "%F %T %-4L ",      "%n", io.stderr},
   {"info", "%F %T %-4L ",      "%n", io.stderr},
-  {"dbg",  "%F %T (%S) %-4L ", "%n", io.stderr},
+  {"dbg",  "%F %T %-4L (%S)%f ", "%n", io.stderr},
   envvar = "SLLOG_LEVEL",  -- default environment variable
 }
 
@@ -249,7 +249,7 @@ local function fetchlevel(self, lvl, msg)
   msg = msg or "setlevel(%s)"
   if not lvl then
     local env = os.getenv(self._envvar)
-    if env then
+    if env and env ~= "" then
       lvl = getlevelidx(self, env)
       msg = msg .. " -- os.getenv('%s')"
     else
