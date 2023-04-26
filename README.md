@@ -232,7 +232,11 @@ There are few examples in folder `examples` demonstrating common functionality.
 
 ## HISTORY
 
-### 0.2 < active
+### 0.2-1 < active
+
+- added showing of object's __tostring metamethod
+
+### 0.2
 
 - finalized settings, methods and module structure
 - refactor all code
@@ -243,6 +247,6 @@ There are few examples in folder `examples` demonstrating common functionality.
 - added documentation to README.md
 - added examples
 
-### 0.1 < active
+### 0.1
 
 - first draft

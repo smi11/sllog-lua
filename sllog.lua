@@ -63,13 +63,17 @@ See README.md for documentation
 
 HISTORY
 
-0.2 < active
+0.2-1 < active
+
+- added showing of object's __tostring metamethod
+
+0.2
 
 - finalized settings, methods and module structure
 - refactor all code
 - fixed compatibility issues with Lua 5.1 and Lua 5.4
 - added memoize for generating prefix and suffix functions
-- added dumpvar() method
+- added vardump() method
 - added pad option
 
 0.1
