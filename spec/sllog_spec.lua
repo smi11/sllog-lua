@@ -305,40 +305,40 @@ describe("method vardump()", function()
     f:seek("set",0)
     local s = f:read("*all")
     f:close()
-    assert.equal('dbg  init() -- 4 levels initialized;'..
+    assert.match(('dbg  init() -- 4 levels initialized;'..
                  'dbg  .level=4;'..
                  'dbg  .report="dbg";'..
                  'dbg  .timefn=true -- timer reset;'..
-                 'dbg  log = <1>{;'..
+                 'dbg  log = <1>{ -- table: 0x{hex};'..
                  'dbg   <function 1>,;'..
                  'dbg   <function 2>,;'..
                  'dbg   <function 3>,;'..
                  'dbg   <function 4>,;'..
                  'dbg   _envvar = "SLLOG_LEVEL",;'..
                  'dbg   _level = 4,;'..
-                 'dbg   _levels = <2>{;'..
-                 'dbg    <3>{;'..
+                 'dbg   _levels = <2>{ -- table: 0x{hex};'..
+                 'dbg    <3>{ -- table: 0x{hex};'..
                  'dbg     handle = <userdata 1>,;'..
                  'dbg     index = 1,;'..
                  'dbg     name = "err",;'..
                  'dbg     prefix = <function 5>,;'..
                  'dbg     suffix = <function 6>,;'..
                  'dbg    },;'..
-                 'dbg    <4>{;'..
+                 'dbg    <4>{ -- table: 0x{hex};'..
                  'dbg     handle = <userdata 1>,;'..
                  'dbg     index = 2,;'..
                  'dbg     name = "warn",;'..
                  'dbg     prefix = <function 5>,;'..
                  'dbg     suffix = <function 6>,;'..
                  'dbg    },;'..
-                 'dbg    <5>{;'..
+                 'dbg    <5>{ -- table: 0x{hex};'..
                  'dbg     handle = <userdata 1>,;'..
                  'dbg     index = 3,;'..
                  'dbg     name = "info",;'..
                  'dbg     prefix = <function 5>,;'..
                  'dbg     suffix = <function 6>,;'..
                  'dbg    },;'..
-                 'dbg    <6>{;'..
+                 'dbg    <6>{ -- table: 0x{hex};'..
                  'dbg     handle = <userdata 1>,;'..
                  'dbg     index = 4,;'..
                  'dbg     name = "dbg",;'..
@@ -359,7 +359,7 @@ describe("method vardump()", function()
                  'dbg   err = <function 9>,;'..
                  'dbg   info = <function 10>,;'..
                  'dbg   warn = <function 11>,;'..
-                 'dbg   <metatable> = <7>{;'..
+                 'dbg   <metatable> = <7>{ -- table: 0x{hex};'..
                  'dbg    _VERSION = "sllog 0.2",;'..
                  'dbg    __call = <function 12>,;'..
                  'dbg    __gc = <function 13>,;'..
@@ -375,36 +375,36 @@ describe("method vardump()", function()
                  'dbg    vardump = <function 22>,;'..
                  'dbg   };'..
                  'dbg  };'..
-                 'err  log = <1>{;'..
+                 'err  log = <1>{ -- table: 0x{hex};'..
                  'err   <function 1>,;'..
                  'err   <function 2>,;'..
                  'err   <function 3>,;'..
                  'err   <function 4>,;'..
                  'err   _envvar = "SLLOG_LEVEL",;'..
                  'err   _level = 4,;'..
-                 'err   _levels = <2>{;'..
-                 'err    <3>{;'..
+                 'err   _levels = <2>{ -- table: 0x{hex};'..
+                 'err    <3>{ -- table: 0x{hex};'..
                  'err     handle = <userdata 1>,;'..
                  'err     index = 1,;'..
                  'err     name = "err",;'..
                  'err     prefix = <function 5>,;'..
                  'err     suffix = <function 6>,;'..
                  'err    },;'..
-                 'err    <4>{;'..
+                 'err    <4>{ -- table: 0x{hex};'..
                  'err     handle = <userdata 1>,;'..
                  'err     index = 2,;'..
                  'err     name = "warn",;'..
                  'err     prefix = <function 5>,;'..
                  'err     suffix = <function 6>,;'..
                  'err    },;'..
-                 'err    <5>{;'..
+                 'err    <5>{ -- table: 0x{hex};'..
                  'err     handle = <userdata 1>,;'..
                  'err     index = 3,;'..
                  'err     name = "info",;'..
                  'err     prefix = <function 5>,;'..
                  'err     suffix = <function 6>,;'..
                  'err    },;'..
-                 'err    <6>{;'..
+                 'err    <6>{ -- table: 0x{hex};'..
                  'err     handle = <userdata 1>,;'..
                  'err     index = 4,;'..
                  'err     name = "dbg",;'..
@@ -425,7 +425,7 @@ describe("method vardump()", function()
                  'err   err = <function 9>,;'..
                  'err   info = <function 10>,;'..
                  'err   warn = <function 11>,;'..
-                 'err   <metatable> = <7>{;'..
+                 'err   <metatable> = <7>{ -- table: 0x{hex};'..
                  'err    _VERSION = "sllog 0.2",;'..
                  'err    __call = <function 12>,;'..
                  'err    __gc = <function 13>,;'..
@@ -440,6 +440,6 @@ describe("method vardump()", function()
                  'err    setlevel = <function 21>,;'..
                  'err    vardump = <function 22>,;'..
                  'err   };'..
-                 'err  };', s)
+                 'err  };'):gsub("[^ %w]", "%%%1"):gsub("%%{hex%%}", "[%%da-f]+"), s)
   end)
 end)
