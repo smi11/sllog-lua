@@ -478,7 +478,7 @@ local function serialize(value, pad, depth, store)
     else
       store.tables[#store.tables+1] = value
       store.tables[value] = #store.tables
-      out(sformat("<%i>{\n", store.tables[value]))
+      out(sformat("<%i>{ -- %s\n", store.tables[value], tostring(value)))
       local i = 1
       for k, v in sorted_pairs(value) do
         out(indent, pad)
