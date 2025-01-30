@@ -1,5 +1,5 @@
 --[[
-sllog 0.2 Simple line logger
+sllog 0.2-2 Simple line logger
 no warranty implied; use at your own risk
 
 Simple line logger. You can define prefix and suffix for each log message. Both
@@ -63,7 +63,11 @@ See README.md for documentation
 
 HISTORY
 
-0.2-1 < active
+0.2-2 < active
+
+- fixed collectgarbage("count") returning nil during __gc execution
+
+0.2-1
 
 - added showing of object's __tostring metamethod
 
@@ -142,8 +146,8 @@ local lookup = {
   n = [[pconfig:sub(1,1) == "\\" and "\r\n" or "\n"]],  -- os based crlf or lf
 
   -- memory
-  k = [[sfmt('%<fmt>f', collectgarbage("count"))]],              -- memory in Kb
-  b = [[sfmt('%<fmt>i', floor(collectgarbage("count")*1024))]],  -- memory in bytes
+  k = [[sfmt('%<fmt>f', _getmem())]],              -- memory in Kb
+  b = [[sfmt('%<fmt>i', floor(_getmem()*1024))]],  -- memory in bytes
 }
 
 -- environment for (factory)
@@ -151,7 +155,6 @@ local fenv = {
   floor=math.floor,
   date=os.date, time=os.time, pconfig=package.config,
   sfmt=string.format, tconcat=table.concat,
-  collectgarbage=collectgarbage
 }
 
 -- convert time to string using os.date and add fractions of seconds
@@ -173,6 +176,12 @@ end
 function fenv._getcaller()
   local fname = debug.getinfo(5).name
   return fname and " "..fname.."()" or ""
+end
+
+-- return used memory
+function fenv._getmem()
+  fenv._mem = collectgarbage("count") or fenv._mem or -1
+  return fenv._mem
 end
 
 -- factory that builds function for formating prefix and suffix
@@ -214,13 +223,9 @@ local function format_factory(str)
       return code[index]
   end
 
-  if setfenv then -- Lua 5.1
-    local f = assert(load(reader,"=(factory)"))
-    setfenv(f,fenv)
-    return f()
-  else
-    return assert(load(reader,"=(factory)", "t", fenv))()
-  end
+  local f = assert(load(reader,"=(factory)", "t", fenv))
+  if setfenv then setfenv(f,fenv) end -- Lua 5.1
+  return f()
 end
 
 -- memoize for format_factory
