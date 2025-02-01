@@ -63,13 +63,13 @@ See README.md for documentation
 
 HISTORY
 
-0.2-2 < active
+0.2-2
 
-- fixed collectgarbage("count") returning nil during __gc execution
+- fixed collectgarbage("count") returning nil during `__gc` execution
 
 0.2-1
 
-- added showing of object's __tostring metamethod
+- added showing of object's `__tostring` metamethod
 
 0.2
 
